@@ -5,32 +5,33 @@ An end-to-end, production-grade guide for building, cross-compiling, and simulat
 
 > **Navigation:** Every Table of Contents entry links to a heading within this Markdown file.
 
-- [1. Linux Kernel Theory: Kernel Architecture Types](#1-linux-kernel-theory-kernel-architecture-types)
-- [2. Linux Kernel Space vs User Space](#2-linux-kernel-space-vs-user-space)
-- [3. Kernel Modules: Theory Before the Practical Build](#3-kernel-modules-theory-before-the-practical-build)
-- [4. Kernel Build Configuration Theory](#4-kernel-build-configuration-theory)
-- [5. Device Tree Theory](#5-device-tree-theory)
-- [6. U-Boot Theory](#6-u-boot-theory)
-- [7. Boot Arguments Theory](#7-boot-arguments-theory)
-- [8. Initramfs Theory](#8-initramfs-theory)
-- [9. BusyBox Theory](#9-busybox-theory)
-- [10. `insmod`, `lsmod`, and `rmmod`](#10-insmod-lsmod-and-rmmod)
-- [11. `prepare` vs `modules_prepare`](#11-prepare-vs-modulesprepare)
-- [12. Why External Modules Must Use Kbuild](#12-why-external-modules-must-use-kbuild)
-- [13. Theory-to-Practice Map](#13-theory-to-practice-map)
-- [14. Core Concepts & Embedded Linux Boot Architecture](#14-core-concepts-embedded-linux-boot-architecture)
-- [15. Host vs. Target Architecture & Cross-Compilation](#15-host-vs-target-architecture-cross-compilation)
-- [16. Toolchain and Host Environment Setup](#16-toolchain-and-host-environment-setup)
-- [17. Building and Testing the U-Boot Bootloader](#17-building-and-testing-the-u-boot-bootloader)
-- [18. Cross-Compiling the Linux Kernel (ARM64)](#18-cross-compiling-the-linux-kernel-arm64)
-- [19. Constructing the User Space with BusyBox (Initramfs)](#19-constructing-the-user-space-with-busybox-initramfs)
-- [20. Writing and Compiling an Out-of-Tree Kernel Module](#20-writing-and-compiling-an-out-of-tree-kernel-module)
-- [21. Packaging the Initramfs Root Filesystem](#21-packaging-the-initramfs-root-filesystem)
-- [22. Booting and Running in QEMU](#22-booting-and-running-in-qemu)
-- [23. Runtime Module Verification Inside QEMU](#23-runtime-module-verification-inside-qemu)
-- [24. Troubleshooting Post-Mortem: Errors and Technical Lessons](#24-troubleshooting-post-mortem-errors-and-technical-lessons)
-- [25. Chat Follow-Up: Rebuilding the Kernel and Preparing for External Modules](#25-chat-follow-up-rebuilding-the-kernel-and-preparing-for-external-modules)
-- [26. Compact Mental Model](#26-compact-mental-model)
+- [1. 1. Linux Kernel Theory: Kernel Architecture Types](#1-linux-kernel-theory-kernel-architecture-types)
+- [2. 2. Linux Kernel Space vs User Space](#2-linux-kernel-space-vs-user-space)
+- [3. 3. Kernel Modules: Theory Before the Practical Build](#3-kernel-modules-theory-before-the-practical-build)
+- [4. 4. Kernel Build Configuration Theory](#4-kernel-build-configuration-theory)
+- [5. 5. Device Tree Theory](#5-device-tree-theory)
+- [6. 6. U-Boot Theory](#6-u-boot-theory)
+- [7. 7. Boot Arguments Theory](#7-boot-arguments-theory)
+- [8. 8. Initramfs Theory](#8-initramfs-theory)
+- [9. 9. BusyBox Theory](#9-busybox-theory)
+- [10. 10. `insmod`, `lsmod`, and `rmmod`](#10-insmod-lsmod-and-rmmod)
+- [11. 11. `prepare` vs `modules_prepare`](#11-prepare-vs-modules-prepare)
+- [12. 12. Why External Modules Must Use Kbuild](#12-why-external-modules-must-use-kbuild)
+- [13. 13. Theory-to-Practice Map](#13-theory-to-practice-map)
+- [14. 14. Core Concepts & Embedded Linux Boot Architecture](#14-core-concepts-embedded-linux-boot-architecture)
+- [15. 15. Host vs. Target Architecture & Cross-Compilation](#15-host-vs-target-architecture-cross-compilation)
+- [16. 16. Toolchain and Host Environment Setup](#16-toolchain-and-host-environment-setup)
+- [17. 17. Building and Testing the U-Boot Bootloader](#17-building-and-testing-the-u-boot-bootloader)
+- [18. 18. Cross-Compiling the Linux Kernel (ARM64)](#18-cross-compiling-the-linux-kernel-arm64)
+- [19. 19. Constructing the User Space with BusyBox (Initramfs)](#19-constructing-the-user-space-with-busybox-initramfs)
+- [20. 20. Writing and Compiling an Out-of-Tree Kernel Module](#20-writing-and-compiling-an-out-of-tree-kernel-module)
+- [21. 21. Packaging the Initramfs Root Filesystem](#21-packaging-the-initramfs-root-filesystem)
+- [22. 22. Booting and Running in QEMU](#22-booting-and-running-in-qemu)
+- [23. 23. Runtime Module Verification Inside QEMU](#23-runtime-module-verification-inside-qemu)
+- [24. 24. Troubleshooting Post-Mortem: Errors and Technical Lessons](#24-troubleshooting-post-mortem-errors-and-technical-lessons)
+- [25. 25. Chat Follow-Up: Rebuilding the Kernel and Preparing for External Modules](#25-chat-follow-up-rebuilding-the-kernel-and-preparing-for-external-modules)
+- [26. 26. Compact Mental Model](#26-compact-mental-model)
+- [27. 27. Device Drivers, `/dev`, and `/sys`](#27-device-drivers-dev-and-sys)
 
 ---
 
@@ -2004,3 +2005,555 @@ The most important troubleshooting principle from the session is:
 > **Always distinguish the host architecture, target architecture, build directory, configuration file, and runtime environment.**
 
 Most of the errors encountered were caused by one of these boundaries being mixed up.
+
+---
+
+## 27. Device Drivers, `/dev`, and `/sys`
+
+A **device driver** is software meant to interact with a specific piece of hardware. Device drivers hide the underlying hardware-specific interactions from user space.
+
+### 27.1 What is a Device Driver?
+
+A device driver is software inside the Linux kernel that knows how to communicate with a particular type of hardware.
+
+```text
+User application
+      │
+      ▼
+Linux interface
+/dev or /sys
+      │
+      ▼
+Device driver
+      │
+      ▼
+Hardware
+```
+
+The application does not need to know which hardware registers to access, how to handle device-specific commands, interrupts, or data transfers. The driver handles those details.
+
+```text
+Application
+     │
+     │ "Read this"
+     ▼
+Linux
+     │
+     ▼
+Device driver
+     │
+     │ hardware-specific operations
+     ▼
+Hardware
+```
+
+This is what it means to say that device drivers **hide the underlying interactions with the hardware from the user**.
+
+### 27.2 Where are Linux Device Drivers?
+
+The Linux kernel source contains a major directory called:
+
+```text
+drivers/
+```
+
+It contains source code for many categories of device drivers, including:
+
+```text
+drivers/
+├── block/       → block devices
+├── char/        → character devices
+├── gpio/        → GPIO
+├── input/       → input devices
+├── media/       → media devices
+├── mtd/         → flash memory
+├── net/         → networking
+├── pci/         → PCI devices
+├── serial/      → serial/UART devices
+├── usb/         → USB devices
+├── video/       → video/display
+└── ...
+```
+
+Device drivers make up a very large portion of the Linux kernel source tree. The course material notes that the `drivers` directory is the largest directory and is approximately 69% of the Linux kernel source code.
+
+### 27.3 `/dev` — The Device Interface
+
+User space can interact with many device drivers through:
+
+```text
+/dev
+```
+
+`/dev` is a special filesystem containing **device files**.
+
+For example:
+
+```bash
+ls /dev
+```
+
+may show entries such as:
+
+```text
+console
+ttyAMA0
+sda
+sda1
+sda2
+```
+
+These are not ordinary files such as `hello.txt` or `program.c`. A device file provides an interface to a device or kernel subsystem.
+
+### 27.4 Why Do Devices Look Like Files?
+
+Linux provides a consistent file-oriented interface for many resources. User space can use operations such as:
+
+```text
+open()
+read()
+write()
+close()
+```
+
+A regular file and a device file can therefore be accessed through similar user-space operations even though their underlying implementations are very different.
+
+For example:
+
+```bash
+echo "Hello from userspace" > /dev/console
+```
+
+Conceptually:
+
+```text
+echo
+ │
+ │ write "Hello"
+ ▼
+/dev/console
+ │
+ ▼
+Console device interface
+ │
+ ▼
+Kernel console subsystem/driver
+ │
+ ▼
+QEMU terminal
+```
+
+This demonstrates how a user-space program can communicate with kernel/device functionality through a device file.
+
+### 27.5 Flash Drive Example
+
+If Linux detects a flash drive with two partitions, they could appear as:
+
+```text
+/dev/sdX
+├── /dev/sdX1
+└── /dev/sdX2
+```
+
+Here:
+
+```text
+sd  → disk/block-device naming
+X   → device letter chosen by Linux
+1   → partition 1
+2   → partition 2
+```
+
+For example, the actual device could be:
+
+```text
+/dev/sda
+├── /dev/sda1
+└── /dev/sda2
+```
+
+The exact letter depends on which devices Linux detects.
+
+A partition can then be mounted, for example:
+
+```bash
+mount /dev/sda1 /mnt
+```
+
+Conceptually:
+
+```text
+Flash drive
+      │
+      ▼
+/dev/sda1
+      │
+      ▼
+Storage/block driver
+      │
+      ▼
+Block layer
+      │
+      ▼
+Filesystem
+      │
+      ▼
+/mnt
+```
+
+### 27.6 `/dev` Is Not an Ordinary Directory
+
+Although `/dev` looks like a normal directory when you run `ls /dev`, its entries are device files provided through a special filesystem. They do not simply contain the raw device data as ordinary files.
+
+```text
+/dev entry
+    │
+    ▼
+Kernel interface
+    │
+    ▼
+Device driver
+    │
+    ▼
+Hardware
+```
+
+### 27.7 `/sys` — sysfs
+
+Another important interface is:
+
+```text
+/sys
+```
+
+`/sys` is also known as **sysfs**. It is a **virtual filesystem** used by the Linux kernel to expose information and attributes about hardware and kernel objects to user space.
+
+A useful mental model is:
+
+```text
+/dev
+  ↓
+"Interact with the device"
+
+/sys
+  ↓
+"Inspect information about the device"
+```
+
+This is a simplified mental model; the exact interfaces provided by Linux are more detailed.
+
+Conceptually:
+
+```text
+User space
+    │
+    │ ls /sys
+    │ cat /sys/...
+    ▼
+  sysfs
+    │
+    ▼
+Linux kernel objects
+    │
+    ▼
+Drivers
+    │
+    ▼
+Hardware
+```
+
+### 27.8 Why Is `/sys` Different from a Normal Directory?
+
+The contents of sysfs are controlled by the kernel and its subsystems/drivers. Users do not simply create arbitrary files there like they would in a normal filesystem.
+
+Instead, device drivers follow defined Linux kernel APIs to expose attributes through sysfs.
+
+```text
+Driver
+  │
+  │ exposes attribute
+  ▼
+sysfs
+  │
+  │ user reads attribute
+  ▼
+cat
+```
+
+### 27.9 `/sys/class`
+
+An especially useful part of sysfs is:
+
+```text
+/sys/class
+```
+
+It organizes devices according to their device class. For example:
+
+```text
+/sys/class/
+├── block/
+├── gpio/
+├── net/
+├── tty/
+├── mtd/
+└── ...
+```
+
+The course focuses on:
+
+```text
+/sys/class/mtd
+```
+
+### 27.10 What Is MTD?
+
+MTD means **Memory Technology Device**. It is a Linux subsystem for certain types of flash memory, such as raw NAND and NOR flash.
+
+In the QEMU environment used in the course, a virtualized flash device is exposed through the MTD subsystem.
+
+### 27.11 Exploring `/sys/class/mtd`
+
+Navigate to:
+
+```bash
+cd /sys/class/mtd
+ls
+```
+
+You may see:
+
+```text
+mtd0
+```
+
+Conceptually:
+
+```text
+/sys/class/mtd
+       │
+       ▼
+     mtd0
+       │
+       ▼
+Virtual flash device
+```
+
+`mtd0` represents the first MTD device exposed by the kernel.
+
+Explore it further:
+
+```bash
+ls /sys/class/mtd/mtd0
+```
+
+The exact attributes exposed can depend on the kernel configuration and device.
+
+### 27.12 Reading the Flash Device Size
+
+One useful attribute is `size`:
+
+```bash
+cat /sys/class/mtd/mtd0/size
+```
+
+Conceptually:
+
+```text
+cat
+ │
+ ▼
+/sys/class/mtd/mtd0/size
+ │
+ ▼
+MTD subsystem
+ │
+ ▼
+Flash device information
+ │
+ ▼
+size
+```
+
+The returned value represents the device size in bytes. For example, `16777216` bytes is 16 MiB.
+
+### 27.13 `/dev` vs `/sys`
+
+This distinction is important:
+
+| Interface | Main purpose | Example |
+|---|---|---|
+| `/dev` | Device access/interface | `/dev/console` |
+| `/sys` | Device/kernel information and attributes | `/sys/class/mtd/mtd0/size` |
+
+A useful mental model is:
+
+```text
+                 Linux Kernel
+                      │
+          ┌───────────┴───────────┐
+          │                       │
+          ▼                       ▼
+        /dev                    /sys
+          │                       │
+          │                       │
+   "Use/interact             "Inspect device
+     with device"              information"
+          │                       │
+          ▼                       ▼
+       Driver                  Driver
+          │                       │
+          └───────────┬───────────┘
+                      ▼
+                   Hardware
+```
+
+### 27.14 Complete Device-Driver Picture
+
+Putting the pieces together:
+
+```text
+                     USER SPACE
+                         │
+              ┌──────────┴──────────┐
+              │                     │
+              ▼                     ▼
+          /dev/console        /sys/class/mtd
+              │                     │
+              │                     ▼
+              │                MTD attributes
+              │                     │
+              ▼                     │
+       Device interface             │
+              │                     │
+              └──────────┬──────────┘
+                         ▼
+                    Linux Driver
+                         │
+                         ▼
+                  Kernel subsystem
+                         │
+                         ▼
+                      Hardware
+```
+
+The device driver is the critical middle layer between Linux and the hardware.
+
+### 27.15 Why Applications Do Not Directly Access Hardware
+
+Without drivers, an application would need to know details such as:
+
+```text
+Which register?
+Which address?
+Which command?
+Which timing?
+Which interrupt?
+Which controller?
+Which hardware revision?
+```
+
+Instead:
+
+```text
+Application
+     │
+     │ standard Linux interface
+     ▼
+Kernel
+     │
+     │ device driver
+     ▼
+Hardware
+```
+
+The driver absorbs the hardware-specific complexity, allowing user-space applications to use standard Linux interfaces without understanding the hardware implementation.
+
+### 27.16 Connection to Device Tree
+
+The Device Tree describes hardware to the Linux kernel:
+
+```text
+Device Tree
+     │
+     │ describes hardware
+     ▼
+Linux Kernel
+     │
+     ▼
+Driver
+     │
+     ▼
+Hardware
+     │
+     ▼
+/dev and /sys
+     │
+     ▼
+User Space
+```
+
+For example:
+
+```text
+Device Tree
+    │
+    │ "There is an MTD/flash device"
+    ▼
+Linux
+    │
+    ▼
+MTD driver
+    │
+    ├──────────────► /dev/...
+    │
+    └──────────────► /sys/class/mtd/...
+```
+
+So Device Tree, device drivers, `/dev`, and `/sys` are connected parts of the same embedded Linux hardware model.
+
+### 27.17 Key Points to Remember
+
+**Device driver**
+
+> Software in the Linux kernel that knows how to communicate with a particular device or hardware subsystem.
+
+**`drivers/`**
+
+> A major Linux kernel source directory containing source code for many device drivers.
+
+**`/dev`**
+
+> A special filesystem exposing device files that provide interfaces for interacting with devices.
+
+**`/sys` / sysfs**
+
+> A virtual filesystem through which the kernel and drivers expose information and attributes about hardware and kernel objects to user space.
+
+**MTD**
+
+> Linux's Memory Technology Device subsystem for certain types of flash memory.
+
+### 27.18 One Mental Model to Memorize
+
+```text
+              User Space
+                  │
+          ┌───────┴───────┐
+          ▼               ▼
+        /dev             /sys
+          │               │
+          │               │
+          ▼               ▼
+        Device          Hardware
+       interface       information
+          │               │
+          └───────┬───────┘
+                  ▼
+             Device Driver
+                  │
+                  ▼
+               Hardware
+```
+
+> **The device driver is the bridge between Linux and the hardware.**
